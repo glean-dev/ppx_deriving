@@ -42,15 +42,15 @@ let mappings_of_type type_decl =
       `Polymorphic,
       List.fold_left (fun (acc, mappings) row_field ->
           (* TODO: use row_field location instead of ptyp_loc when fixed in Parsetree *)
-          match row_field with
+          match row_field.prf_desc with
           | Rinherit _ ->
             raise_errorf ~loc:ptyp_loc
                          "%s cannot be derived for inherited variant cases" deriver
-          | Rtag (name, attrs, true, []) ->
+          | Rtag (name, true, []) ->
 #if OCAML_VERSION < (4, 06, 0)
             let name = mkloc name ptyp_loc in
 #endif
-            map acc mappings attrs name
+            map acc mappings row_field.prf_attributes name
           | Rtag _ ->
             raise_errorf ~loc:ptyp_loc
                          "%s can be derived only for argumentless constructors" deriver)
@@ -62,7 +62,7 @@ let mappings_of_type type_decl =
     match mappings with
     | (a, { txt=atxt; loc=aloc }) :: (b, { txt=btxt; loc=bloc }) :: _ when a = b ->
       let sigil = match kind with `Regular -> "" | `Polymorphic -> "`" in
-      let sub = [Location.errorf ~loc:bloc "Same as for %s%s" sigil btxt] in
+      let sub = [Location.msg ~loc:bloc "Same as for %s%s" sigil btxt] in
       raise_errorf ~sub ~loc:aloc
                    "%s: duplicate value %d for constructor %s%s" deriver a sigil atxt
     | _ :: rest -> check_dup rest

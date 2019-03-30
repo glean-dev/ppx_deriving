@@ -174,14 +174,14 @@ let rec expr_of_typ quoter typ =
     | { ptyp_desc = Ptyp_variant (fields, _, _); ptyp_loc } ->
       let cases =
         fields |> List.map (fun field ->
-          match field with
-          | Rtag (label, _, true (*empty*), []) ->
+          match field.prf_desc with
+          | Rtag (label, true (*empty*), []) ->
 #if OCAML_VERSION >= (4, 06, 0)
             let label = label.txt in
 #endif
             Exp.case (Pat.variant label None)
                      [%expr Ppx_deriving_runtime.Format.pp_print_string fmt [%e str ("`" ^ label)]]
-          | Rtag (label, _, false, [typ]) ->
+          | Rtag (label, false, [typ]) ->
 #if OCAML_VERSION >= (4, 06, 0)
             let label = label.txt in
 #endif

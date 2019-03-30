@@ -67,10 +67,10 @@ let rec expr_of_typ typ =
           Pat.variant label.txt popt
 #endif
         in
-        match field with
-        | Rtag (label, _, true (*empty*), []) ->
+        match field.prf_desc with
+        | Rtag (label, true (*empty*), []) ->
           Exp.case (variant label None) [%expr ()]
-        | Rtag (label, _, false, [typ]) ->
+        | Rtag (label, false, [typ]) ->
           Exp.case (variant label (Some [%pat? x]))
                    [%expr [%e expr_of_typ typ] x]
         | Rinherit ({ ptyp_desc = Ptyp_constr (tname, _) } as typ) ->

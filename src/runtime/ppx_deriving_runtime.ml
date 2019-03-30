@@ -32,7 +32,6 @@ type int64 = Predef._int64
 type 'a lazy_t = 'a Predef._lazy_t
 type bytes = Predef._bytes
 
-module Pervasives = Pervasives
 module Char = Char
 module String = String
 module Printexc = Printexc
@@ -56,4 +55,4 @@ module Format = Format
 module Buffer = Buffer
 module Result = Result
 
-include Pervasives
+include Stdlib
