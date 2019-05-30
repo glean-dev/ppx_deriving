@@ -70,10 +70,17 @@ let lookup name =
   | Some (Internal d) -> Some d
   | Some (External _) | None -> None
 
+#if OCAML_VERSION < (4, 08, 0)
+let raise_errorf ?sub ?if_highlight ?loc message =
+  message |> Printf.kprintf (fun str ->
+    let err = Location.error ?sub ?if_highlight ?loc str in
+    raise (Location.Error err))
+#else
 let raise_errorf ?sub ?if_highlight:_ ?loc message =
   message |> Printf.kprintf (fun str ->
     let err = Location.error ?sub ?loc str in
     raise (Location.Error err))
+#endif
 
 let create =
   let def_ext_str name ~options ~path typ_ext =
@@ -163,20 +170,29 @@ module Arg = struct
   let get_attr ~deriver conv attr =
     match attr with
     | None -> None
-    | Some ({ attr_name = { txt = name }
-            ; attr_payload = PStr [{ pstr_desc = Pstr_eval (expr, []) }]}) ->
+#if OCAML_VERSION < (4, 08, 0)
+    | Some ( { txt = name }
+           , attr_payload = PStr [{ pstr_desc = Pstr_eval (expr, []) }]) ->
+#else
+    | Some { attr_name = { txt = name }
+           ; attr_payload = PStr [{ pstr_desc = Pstr_eval (expr, []) }]} ->
+#endif
       begin match conv expr with
       | Ok v -> Some v
       | Error desc ->
         raise_errorf ~loc:expr.pexp_loc "%s: invalid [@%s]: %s expected" deriver name desc
       end
+#if OCAML_VERSION < (4, 08, 0)
+    | Some ({ txt = name; loc }; _) ->
+#else
     | Some ({attr_name = { txt = name; loc }; _}) ->
+#endif
       raise_errorf ~loc "%s: invalid [@%s]: value expected" deriver name
 
   let get_flag ~deriver attr =
     match attr with
     | None -> false
-    | Some ({attr_name = { txt = name };attr_payload = PStr []}) -> true
+    | Some ({attr_name = _; attr_payload = PStr []}) -> true
     | Some ({attr_name = { txt = name; loc }; _}) ->
       raise_errorf ~loc "%s: invalid [@%s]: empty structure expected" deriver name
 
@@ -189,9 +205,7 @@ end
 let attr_warning expr =
   let loc = !default_loc in
   let structure = {pstr_desc = Pstr_eval (expr, []); pstr_loc = loc} in
-  { attr_name = {txt = "ocaml.warning"; loc}
-  ; attr_payload = PStr [structure]
-  ; attr_loc = Location.none }
+  Attr.mk ~loc "ocaml.warning" (PStr [structure])
 
 type quoter = {
   mutable next_id : int;
@@ -209,16 +223,17 @@ let quote ~quoter expr =
 let sanitize ?(module_=Lident "Ppx_deriving_runtime") ?(quoter=create_quoter ()) expr =
   let body =
     Exp.open_
-      ?loc:None
       ~attrs:[attr_warning [%expr "-A"]]
+#if OCAML_VERSION < (4, 08, 0)
+      Override { txt=module_; loc=(!Ast_helper.default_loc) } expr
+#else
       { popen_override = Override
       ; popen_loc = Location.none
       ; popen_attributes = []
-      ; popen_expr =
-          { pmod_attributes = []
-          ; pmod_loc = Location.none
-          ; pmod_desc = Pmod_ident {txt=module_; loc=(!Ast_helper.default_loc) }}}
+      ; popen_expr = Mod.ident ~loc:(!Ast_helper.default_loc) module_
+      }
       expr
+#endif
   in
   match quoter.bindings with
   | [] -> body
@@ -264,7 +279,7 @@ let attr ~deriver name attrs =
       String.sub str 0 (String.length prefix) = prefix
   in
   let try_prefix prefix f =
-    if List.exists (fun ({attr_name = { txt }; _}) -> starts txt prefix) attrs
+    if List.exists (fun a -> starts (Attr.name a) prefix) attrs
     then prefix ^ name
     else f ()
   in
@@ -273,7 +288,7 @@ let attr ~deriver name attrs =
       try_prefix (deriver^".") (fun () ->
         name))
   in
-  try Some (List.find (fun ({attr_name = { txt }; _}) -> txt = name) attrs)
+  try Some (List.find (fun a -> Attr.name a = name) attrs)
   with Not_found -> None
 
 let attr_nobuiltin ~deriver attrs =
@@ -362,9 +377,13 @@ let free_vars_in_core_type typ =
     | { ptyp_desc = Ptyp_poly (bound, x) } ->
       List.filter (fun y -> not (List.mem y bound)) (free_in x)
     | { ptyp_desc = Ptyp_variant (rows, _, _) } ->
-      List.map (
-          function {prf_desc = Rtag (_,_,ts)} -> List.map free_in ts
-                 | {prf_desc = Rinherit t} -> [free_in t]
+      List.map (fun x ->
+#if OCAML_VERSION >= (4, 08, 0)
+        let x = x.prf_desc in
+#endif
+        match x with
+        | Rtag (_,_,ts) -> List.map free_in ts
+        | Rinherit t -> [free_in t]
         ) rows |> List.concat |> List.concat
     | _ -> assert false
   in
