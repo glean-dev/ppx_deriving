@@ -205,7 +205,7 @@ end
 let attr_warning expr =
   let loc = !default_loc in
   let structure = {pstr_desc = Pstr_eval (expr, []); pstr_loc = loc} in
-  Attr.mk ~loc "ocaml.warning" (PStr [structure])
+  Attr.mk ~loc (mkloc "ocaml.warning" loc) (PStr [structure])
 
 type quoter = {
   mutable next_id : int;
@@ -230,7 +230,7 @@ let sanitize ?(module_=Lident "Ppx_deriving_runtime") ?(quoter=create_quoter ())
       { popen_override = Override
       ; popen_loc = Location.none
       ; popen_attributes = []
-      ; popen_expr = Mod.ident ~loc:(!Ast_helper.default_loc) module_
+      ; popen_expr = Mod.ident ~loc:(!Ast_helper.default_loc) (mkloc module_ !Ast_helper.default_loc)
       }
       expr
 #endif
@@ -278,8 +278,9 @@ let attr ~deriver name attrs =
     String.length str >= String.length prefix &&
       String.sub str 0 (String.length prefix) = prefix
   in
+  let attr_name { Parsetree.attr_name = { Location.txt } } = txt in
   let try_prefix prefix f =
-    if List.exists (fun a -> starts (Attr.name a) prefix) attrs
+    if List.exists (fun a -> starts (attr_name a) prefix) attrs
     then prefix ^ name
     else f ()
   in
@@ -288,7 +289,7 @@ let attr ~deriver name attrs =
       try_prefix (deriver^".") (fun () ->
         name))
   in
-  try Some (List.find (fun a -> Attr.name a = name) attrs)
+  try Some (List.find (fun a -> attr_name a = name) attrs)
   with Not_found -> None
 
 let attr_nobuiltin ~deriver attrs =
